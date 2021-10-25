@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"gopkg.in/mail.v2"
 	"strconv"
 	"time"
 
@@ -11,14 +12,17 @@ import (
 	"github.com/waleedElgazar/resturant/models"
 	"golang.org/x/crypto/bcrypt"
 )
-var MySecrestKey = "resturantwithwaleed"
+
+var MySecretKey = "resturantwithwaleed"
 var CommonUserId int
+var verifyCode models.Verification
+var MyAccount= "walidreda427@gmail.com"
 
 func Register(ctx *fiber.Ctx) error {
 	var data map[string]string
 	err := ctx.BodyParser(&data)
 	if err != nil {
-		fmt.Println("error while parsing data",err)
+		fmt.Println("error while parsing data", err)
 		return err
 	}
 	password, err := bcrypt.GenerateFromPassword([]byte(data["password"]), 14)
@@ -26,12 +30,18 @@ func Register(ctx *fiber.Ctx) error {
 		fmt.Println("error while encrypting password")
 		return err
 	}
+	verifyCode=models.Verification{
+		UserAccount: data["email"],
+		VerificationCode: database.CreateOTP(),
+	}
 	user := models.User{
 		UserName:     data["name"],
 		UserEmail:    data["email"],
 		UserPhone:    data["phone"],
 		UserPassword: password,
 	}
+	database.AddVerification(verifyCode)
+	SendVerifyCode(verifyCode)
 	database.AddUser(user)
 	return ctx.JSON(user)
 }
@@ -44,14 +54,14 @@ func Login(ctx *fiber.Ctx) error {
 		return err
 	}
 	user := database.GetUser(data["email"])
-	CommonUserId=int(user.IdUser)
-	pass:=data["password"]
-	err = bcrypt.CompareHashAndPassword(user.UserPassword,[]byte(pass))
+	CommonUserId = int(user.IdUser)
+	pass := data["password"]
+	err = bcrypt.CompareHashAndPassword(user.UserPassword, []byte(pass))
 	if err != nil {
 		ctx.Status(fiber.StatusUnauthorized)
 		return ctx.JSON(
 			fiber.Map{
-				"message":"the password isn't correct",
+				"message": "the password isn't correct",
 			},
 		)
 	}
@@ -59,7 +69,7 @@ func Login(ctx *fiber.Ctx) error {
 		Issuer:    strconv.Itoa(int(user.IdUser)),
 		ExpiresAt: time.Now().Add(time.Minute * 10).Unix(),
 	})
-	token, err := claims.SignedString([]byte(MySecrestKey))
+	token, err := claims.SignedString([]byte(MySecretKey))
 	if err != nil {
 		ctx.Status(fiber.StatusInternalServerError)
 		return ctx.JSON(fiber.Map{
@@ -78,30 +88,30 @@ func Login(ctx *fiber.Ctx) error {
 	})
 }
 
-func GetUser(ctx *fiber.Ctx)error{
-	cookie:=ctx.Cookies("jwt")
-	token,err:=jwt.ParseWithClaims(cookie,&jwt.StandardClaims{},
+func GetUser(ctx *fiber.Ctx) error {
+	cookie := ctx.Cookies("jwt")
+	token, err := jwt.ParseWithClaims(cookie, &jwt.StandardClaims{},
 		func(token *jwt.Token) (interface{}, error) {
-			return []byte(MySecrestKey),nil
+			return []byte(MySecretKey), nil
 		})
 	if err != nil {
 		ctx.Status(fiber.StatusUnauthorized)
 		return ctx.JSON(fiber.Map{
-			"message":"Unauthorized",
+			"message": "Unauthorized",
 		})
 	}
-	claims:=token.Claims.(*jwt.StandardClaims)
-	id,_:=strconv.Atoi(claims.Issuer)
-	user:=database.GetUserWithId(uint(id))
+	claims := token.Claims.(*jwt.StandardClaims)
+	id, _ := strconv.Atoi(claims.Issuer)
+	user := database.GetUserWithId(uint(id))
 	return ctx.JSON(user)
 }
 
-func IsAuthorized(ctx *fiber.Ctx)error{
+func IsAuthorized(ctx *fiber.Ctx) error {
 	//must run login function to get the token first
-	cookie:=ctx.Cookies("jwt")
-	_,err:=jwt.ParseWithClaims(cookie,&jwt.StandardClaims{},
+	cookie := ctx.Cookies("jwt")
+	_, err := jwt.ParseWithClaims(cookie, &jwt.StandardClaims{},
 		func(token *jwt.Token) (interface{}, error) {
-			return []byte(MySecrestKey),nil
+			return []byte(MySecretKey), nil
 		})
 	if err != nil {
 		ctx.Status(fiber.StatusUnauthorized)
@@ -110,16 +120,68 @@ func IsAuthorized(ctx *fiber.Ctx)error{
 	return nil
 }
 
-
-func LogOut(ctx *fiber.Ctx)error{
-	cookie:=fiber.Cookie{
-		Name: "jwt",
-		Value: "",
-		Expires: time.Now().Add(-time.Hour),
+func LogOut(ctx *fiber.Ctx) error {
+	cookie := fiber.Cookie{
+		Name:     "jwt",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour),
 		HTTPOnly: true,
 	}
 	ctx.Cookie(&cookie)
 	return ctx.JSON(fiber.Map{
-		"message":"success",
+		"message": "success",
 	})
 }
+
+func VerifyAccount(ctx *fiber.Ctx) error {
+	var data models.Verification
+	err:=ctx.BodyParser(&data)
+	if err!=nil {
+		fmt.Println("error while verify",err)
+		return nil
+	}
+
+	if data.VerificationCode!= verifyCode.VerificationCode{
+		ctx.Status(fiber.StatusUnauthorized)
+		return ctx.JSON(
+			fiber.Map{
+				"message":"verification failed ",
+			},
+			)
+	}
+	return ctx.JSON(
+		fiber.Map{
+			"message":"verification success ",
+		},
+	)
+}
+func SendVerifyCode(data models.Verification){
+	adc := mail.NewMessage()
+	adc.SetHeader("From", MyAccount)
+	adc.SetHeader("To", data.UserAccount)
+	adc.SetHeader("Subject", "hi from golang")
+	adc.SetBody("text/plain", "your verification code is "+data.VerificationCode)
+	a := mail.NewDialer("smtp.gmail.com", 587, "walidreda427@gmail.com", "wre01204467121")
+	if err := a.DialAndSend(adc); err != nil {
+		fmt.Println("error ", err)
+		panic(err)
+	}
+}
+/*
+import(
+	"fmt"
+	"gopkg.in/mail.v2"
+)
+func main(){
+	adc:=mail.NewMessage()
+	adc.SetHeader("From","walidreda427@gmail.com")
+	adc.SetHeader("To","walidreda428@gmail.com")
+	adc.SetHeader("Subject","hi from golang")
+	adc.SetBody("text/plain","this is test")
+	a:=mail.NewDialer("smtp.gmail.com",587,"walidreda427@gmail.com","wre01204467121")
+	if err:=a.DialAndSend(adc);err!=nil {
+		fmt.Println("error ",err)
+		panic(err)
+	}
+}
+*/

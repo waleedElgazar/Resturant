@@ -1,8 +1,10 @@
 package database
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"fmt"
+	"io"
 
 	"github.com/waleedElgazar/resturant/configration"
 	"github.com/waleedElgazar/resturant/models"
@@ -86,4 +88,34 @@ func GetUserWithId(search uint) models.User {
 	}
 	return user
 
+}
+
+func AddVerification(verify models.Verification){
+	DB = configration.OpenConnection()
+	defer DB.Close()
+	query := "INSERT INTO newResturant.verify set userEmail=?, verificationcode=?"
+	insert, err := DB.Prepare(query)
+	if err != nil {
+		fmt.Println("error while executing insert query")
+		return
+	}
+	_, err = insert.Exec(verify.UserAccount,verify.VerificationCode)
+	if err != nil {
+		fmt.Println("error while parsing inserting data",err)
+		return
+	}
+}
+
+func CreateOTP() string {
+	var table = [...]byte{'1', '2', '3', '4', '5', '6', '7', '8', '9', '0'}
+	max := 6
+	b := make([]byte, max)
+	n, err := io.ReadAtLeast(rand.Reader, b, max)
+	if n != max {
+		panic(err)
+	}
+	for i := 0; i < len(b); i++ {
+		b[i] = table[int(b[i])%len(table)]
+	}
+	return string(b)
 }
