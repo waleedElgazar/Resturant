@@ -11,5 +11,6 @@ func main() {
 	app := fiber.New()
 	routes.UserSetUp(app)
 	routes.OrderSetUp(app)
+	routes.PaymentSetUp(app)
 	app.Listen(":8000")
 }
