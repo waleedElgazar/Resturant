@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"gopkg.in/mail.v2"
+	"os"
 	"strconv"
 	"time"
 
@@ -13,10 +14,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var MySecretKey = "resturantwithwaleed"
 var CommonUserId int
 var verifyCode models.Verification
-var MyAccount= "walidreda427@gmail.com"
 
 func Register(ctx *fiber.Ctx) error {
 	var data map[string]string
@@ -69,7 +68,7 @@ func Login(ctx *fiber.Ctx) error {
 		Issuer:    strconv.Itoa(int(user.IdUser)),
 		ExpiresAt: time.Now().Add(time.Minute * 10).Unix(),
 	})
-	token, err := claims.SignedString([]byte(MySecretKey))
+	token, err := claims.SignedString([]byte(os.Getenv("MySecretKey")))
 	if err != nil {
 		ctx.Status(fiber.StatusInternalServerError)
 		return ctx.JSON(fiber.Map{
@@ -92,7 +91,7 @@ func GetUser(ctx *fiber.Ctx) error {
 	cookie := ctx.Cookies("jwt")
 	token, err := jwt.ParseWithClaims(cookie, &jwt.StandardClaims{},
 		func(token *jwt.Token) (interface{}, error) {
-			return []byte(MySecretKey), nil
+			return []byte(os.Getenv("MySecretKey")), nil
 		})
 	if err != nil {
 		ctx.Status(fiber.StatusUnauthorized)
@@ -111,7 +110,7 @@ func IsAuthorized(ctx *fiber.Ctx) error {
 	cookie := ctx.Cookies("jwt")
 	_, err := jwt.ParseWithClaims(cookie, &jwt.StandardClaims{},
 		func(token *jwt.Token) (interface{}, error) {
-			return []byte(MySecretKey), nil
+			return []byte(os.Getenv("MySecretKey")), nil
 		})
 	if err != nil {
 		ctx.Status(fiber.StatusUnauthorized)
@@ -157,31 +156,14 @@ func VerifyAccount(ctx *fiber.Ctx) error {
 }
 func SendVerifyCode(data models.Verification){
 	adc := mail.NewMessage()
-	adc.SetHeader("From", MyAccount)
+	adc.SetHeader("From", os.Getenv("EMAIL"))
+	fmt.Println("email",os.Getenv("EMAIL"),os.Getenv("PASSWORD"))
 	adc.SetHeader("To", data.UserAccount)
 	adc.SetHeader("Subject", "hi from golang")
 	adc.SetBody("text/plain", "your verification code is "+data.VerificationCode)
-	a := mail.NewDialer("smtp.gmail.com", 587, "walidreda427@gmail.com", "wre01204467121")
+	a := mail.NewDialer("smtp.gmail.com", 587, "walidreda427@gmail.com", os.Getenv("PASSWORD"))
 	if err := a.DialAndSend(adc); err != nil {
 		fmt.Println("error ", err)
 		panic(err)
 	}
 }
-/*
-import(
-	"fmt"
-	"gopkg.in/mail.v2"
-)
-func main(){
-	adc:=mail.NewMessage()
-	adc.SetHeader("From","walidreda427@gmail.com")
-	adc.SetHeader("To","walidreda428@gmail.com")
-	adc.SetHeader("Subject","hi from golang")
-	adc.SetBody("text/plain","this is test")
-	a:=mail.NewDialer("smtp.gmail.com",587,"walidreda427@gmail.com","wre01204467121")
-	if err:=a.DialAndSend(adc);err!=nil {
-		fmt.Println("error ",err)
-		panic(err)
-	}
-}
-*/
